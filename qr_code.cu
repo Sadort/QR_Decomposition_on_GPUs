@@ -9,7 +9,7 @@ __global__ void update_diagonal(float *d_v, float *d_x, float *d_norm)
 {
     if(threadIdx.x == 1)
     {
-        if (*d_x > 0) {
+        if (*d_x >= 0) {
             d_v[0] = *d_x - *d_norm;
         }else{
             d_v[0] = *d_x + *d_norm;
@@ -21,7 +21,7 @@ __global__ void update_beta(float *d_beta, float *d_dotpro)
 {
     if(threadIdx.x == 1)
     {
-        *d_beta = -2 / *d_dotpro;
+        *d_beta = (float)(-2 / *d_dotpro);
     }
 }
 
@@ -94,7 +94,7 @@ void apply_house(float *d_v, float *d_A, float *d_beta, int len, int m, int n)
     
     float *d_v_A;
     cudaStat = cudaMalloc((void**)&d_v_A, sizeof(float) * sub_n);
-    cudaStat = cudaMemset((void*)d_v_A, ZERO, sizeof(float) * sub_n);
+    //cudaStat = cudaMemset((void*)d_v_A, ZERO, sizeof(float) * sub_n);
 
     float *alpha;
     float *beta;
@@ -132,7 +132,6 @@ void qr_calculate(float *d_A, int m, int n)
     cublasCreate(&handle);
     cublasSetPointerMode(handle, CUBLAS_POINTER_MODE_DEVICE);
     
-    float A[m*n];
     int len = 0;
     float *d_beta, *d_house_v;
     cudaStat = cudaMalloc((void**)&d_beta,sizeof(float)*1);
