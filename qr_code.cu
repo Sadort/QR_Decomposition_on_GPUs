@@ -113,7 +113,8 @@ void apply_house(float *d_v, float *d_A, float *d_beta, int len, int m, int n)
     cudaStat = cudaMemcpy(beta, &ONE, sizeof(float) * 1, cudaMemcpyHostToDevice);
     cudaDeviceSynchronize();
    
-    stat = cublasSgemm(handle, CUBLAS_OP_N, CUBLAS_OP_N, sub_m, sub_n, 1, d_beta, d_v, sub_m, d_v_A, 1, beta, d_A, m);
+    //stat = cublasSgemm(handle, CUBLAS_OP_N, CUBLAS_OP_N, sub_m, sub_n, 1, d_beta, d_v, sub_m, d_v_A, 1, beta, d_A, m);
+    stat = cublasSger(handle, sub_m, sub_n, d_beta, d_v, 1, d_v_A, 1, d_A, m);
     cudaDeviceSynchronize();
    
 
