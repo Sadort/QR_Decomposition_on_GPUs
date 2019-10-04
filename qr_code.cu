@@ -47,7 +47,7 @@ void house(cublasHandle_t handle, float *d_v, float *d_x, float *d_beta, int len
     cublasStatus_t stat;
 
     float *d_norm, *d_dotpro;
-    float ZERO = 0;
+    float ZERO = 0.0f;
     
     cudaStat = cudaMalloc((void**)&d_norm, sizeof(float) * 1);
     cudaStat = cudaMalloc((void**)&d_dotpro, sizeof(float) * 1);
@@ -92,7 +92,7 @@ void apply_house(cublasHandle_t handle, float *d_v, float *d_A, float *d_beta, i
     }else{
         sub_n = (len % r == 0 ? r : (len % r));
     }
-    float ONE = 1, ZERO = 0;
+    float ONE = 1.0f, ZERO = 0.0f;
 
     float *d_v_A;
     cudaStat = cudaMalloc((void**)&d_v_A, sizeof(float) * sub_n);
@@ -125,12 +125,13 @@ void apply_house(cublasHandle_t handle, float *d_v, float *d_A, float *d_beta, i
 
 }
 
-void generate_WY(cublasHandle_t handle, float *W, float *Y, float *d_beta, int m, int n, int len, int r)
-{
+void generate_WY(cublasHandle_t handle, float *W, const float *Y, float *d_beta, int m, int n, int len, int r)
+{ 
+    float Y_v[r];
     cudaError_t cudaStat;
     cublasStatus_t stat;
    
-    int ONE = 1, ZERO = 0;
+    float ONE = 1.0f, ZERO = 0.0f;
     float *d_Y_v;
     float *alpha;
     float *beta;
@@ -139,6 +140,7 @@ void generate_WY(cublasHandle_t handle, float *W, float *Y, float *d_beta, int m
     cudaStat = cudaMalloc((void**)&beta, sizeof(float) * 1);
     cudaStat = cudaMemcpy(alpha, &ONE, sizeof(float) * 1, cudaMemcpyHostToDevice);
     cudaStat = cudaMemcpy(beta, &ZERO, sizeof(float) * 1, cudaMemcpyHostToDevice);
+//    cudaStat = cudaMemcpy(d_Y_v, Y_v, sizeof(float) * r, cudaMemcpyHostToDevice);
 
     cudaDeviceSynchronize();
     
@@ -147,10 +149,21 @@ void generate_WY(cublasHandle_t handle, float *W, float *Y, float *d_beta, int m
     cudaDeviceSynchronize();
     
     for (int j = 1; j < r; j++) {
-        stat = cublasSgemv(handle, CUBLAS_OP_T, len, j, alpha, Y, len, &Y[IDX2C(0,j,len)], len, beta, d_Y_v, j);
+        stat = cublasSgemv(handle, CUBLAS_OP_T, len, j, alpha, Y, len, (float*)&Y[IDX2C(0,j,len)], 1, beta, d_Y_v, 1);
+        //stat = cublasSgemv(handle, CUBLAS_OP_T, len, j, alpha, Y, len, Y+(len*r), 1, beta, d_Y_v, 1);
         cudaDeviceSynchronize();
         
-        stat = cublasSgemv(handle, CUBLAS_OP_N, len, j, &d_beta[j], W, len, d_Y_v, j, &d_beta[j], &W[IDX2C(0,j,len)], len);
+        //ONE = -2.0;
+        //cudaStat = cudaMemcpy(d_Y_v, &ONE, sizeof(float), cudaMemcpyHostToDevice);        
+        cudaStat = cudaMemcpy(Y_v, d_Y_v, sizeof(float)*r, cudaMemcpyDeviceToHost);
+        cudaDeviceSynchronize();
+
+        for (int i = 0; i < r; i++) {
+            printf("%f ", Y_v[i]);
+        }
+        printf("\n");
+
+        stat = cublasSgemv(handle, CUBLAS_OP_N, len, j, &d_beta[j], W, len, d_Y_v, 1, &d_beta[j], &W[IDX2C(0,j,len)], 1);
         cudaDeviceSynchronize();
     }
 
@@ -169,7 +182,7 @@ void apply_WY(cublasHandle_t handle, float *d_A, float *W, float *Y, int m, int 
     float *d_W_A;
     float *alpha;
     float *beta;
-    int ONE = 1, ZERO = 0;
+    float ONE = 1.0f, ZERO = 0.0f;
     int sub_m = len;
     int sub_n = n - m + len;
     cudaStat = cudaMalloc((void**)&d_W_A, sizeof(float) * r * sub_n);
@@ -263,13 +276,13 @@ void blocked_qr_calculate(float *d_A, int m, int n, int r)
             printf("block %d, row %d, access apply_house()\n", k, j);
             //apply householder reflector
             apply_house(handle, &d_house_v[IDX2C(j,j,len)], &d_A[IDX2C(ind,ind,m)], &d_beta[j], sub_len, m, n, r);
-            /*cudaStat = cudaMemcpy(A, d_A, sizeof(float)*m*n, cudaMemcpyDeviceToHost);
+            cudaStat = cudaMemcpy(A, d_A, sizeof(float)*m*n, cudaMemcpyDeviceToHost);
             cudaDeviceSynchronize();
 
             for (int i = 0; i < m*n; i++) {
-                printf("%f ", A[i]);
+//                printf("%f ", A[i]);
             }
-            printf("\n");*/
+            printf("\n");
         }
         if(len == m - n + r)
             return;
