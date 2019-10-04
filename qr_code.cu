@@ -41,55 +41,50 @@ Computes W = beta A V + alpha W
 //__global__ void gtSgemv(float alpha, float beta, float *A, float *V, int M, int N, float *W)
 
 
-void house(float *d_v, float *d_x, float *d_beta, int len, int m, int n)
+void house(cublasHandle_t handle, float *d_v, float *d_x, float *d_beta, int len, int m, int n)
 {
     cudaError_t cudaStat;
     cublasStatus_t stat;
-    cublasHandle_t handle;
-    cublasCreate(&handle);
 
     float *d_norm, *d_dotpro;
     float ZERO = 0;
     
     cudaStat = cudaMalloc((void**)&d_norm, sizeof(float) * 1);
     cudaStat = cudaMalloc((void**)&d_dotpro, sizeof(float) * 1);
-    
-    cudaStat = cudaMemset((void*)d_norm, ZERO, sizeof(float) * 1);
-    cudaStat = cudaMemset((void*)d_dotpro, ZERO, sizeof(float) * 1);
+  
+    cudaStat = cudaMemcpy(d_norm, &ZERO, sizeof(float) * 1, cudaMemcpyHostToDevice);
+    cudaStat = cudaMemcpy(d_dotpro, &ZERO, sizeof(float) * 1, cudaMemcpyHostToDevice);  
+
     cudaDeviceSynchronize();
-    cublasSetPointerMode(handle, CUBLAS_POINTER_MODE_DEVICE);
-    printf("got here1\n");
+
     stat = cublasSnrm2(handle, len, d_x, 1, d_norm);
     cudaDeviceSynchronize();
-    printf("got here2\n");
 
     stat = cublasScopy(handle, len, d_x, 1, d_v, 1);
     //mycopy<<<1024*16, 256>>>(d_v, d_x, len);
-    printf("got here3\n");
+
     cudaDeviceSynchronize();
     update_diagonal<<<1, 8>>>(d_v, d_x, d_norm);
     cudaDeviceSynchronize();
-
+    
     stat = cublasSdot(handle, len, d_v, 1, d_v, 1, d_dotpro);
     cudaDeviceSynchronize();
-
+    
     update_beta<<<1, 8>>>(d_beta, d_dotpro);
     cudaDeviceSynchronize();
+    
 
-    cublasDestroy(handle);
     cudaFree(d_norm);
     cudaFree(d_dotpro);
-
+    
     return;
 }
 
-void apply_house(float *d_v, float *d_A, float *d_beta, int len, int m, int n, int r)
+void apply_house(cublasHandle_t handle, float *d_v, float *d_A, float *d_beta, int len, int m, int n, int r)
 {
     cudaError_t cudaStat;
     cublasStatus_t stat;
-    cublasHandle_t handle;
-    cublasCreate(&handle);
-
+    
     int sub_m = len;
     int sub_n;
     if (r == 1) {
@@ -107,11 +102,11 @@ void apply_house(float *d_v, float *d_A, float *d_beta, int len, int m, int n, i
     float *beta;
     cudaStat = cudaMalloc((void**)&alpha, sizeof(float) * 1);
     cudaStat = cudaMalloc((void**)&beta, sizeof(float) * 1);
-    cudaStat = cudaMemset((void*)alpha, ONE, sizeof(float) * 1);
-    cudaStat = cudaMemset((void*)beta, ZERO, sizeof(float) * 1);
+    cudaStat = cudaMemcpy(alpha, &ONE, sizeof(float) * 1, cudaMemcpyHostToDevice);
+    cudaStat = cudaMemcpy(beta, &ZERO, sizeof(float) * 1, cudaMemcpyHostToDevice);
     cudaDeviceSynchronize();
     
-    cublasSetPointerMode(handle, CUBLAS_POINTER_MODE_DEVICE);
+    
     cudaDeviceSynchronize();
     stat = cublasSgemm(handle, CUBLAS_OP_N, CUBLAS_OP_N, 1, sub_n, sub_m, alpha, d_v, 1, d_A, m, beta, d_v_A, 1);
     cudaDeviceSynchronize();
@@ -120,25 +115,21 @@ void apply_house(float *d_v, float *d_A, float *d_beta, int len, int m, int n, i
     cudaStat = cudaMemcpy(beta, &ONE, sizeof(float) * 1, cudaMemcpyHostToDevice);
     cudaDeviceSynchronize();
     
-    //stat = cublasSgemm(handle, CUBLAS_OP_N, CUBLAS_OP_N, sub_m, sub_n, 1, d_beta, d_v, sub_m, d_v_A, 1, beta, d_A, m);
+    
     stat = cublasSger(handle, sub_m, sub_n, d_beta, d_v, 1, d_v_A, 1, d_A, m);
     cudaDeviceSynchronize();
     
-    cublasDestroy(handle);
     cudaFree(d_v_A);
     
     return;
 
 }
 
-void generate_WY(float *W, float *Y, float *d_beta, int m, int n, int len, int r)
+void generate_WY(cublasHandle_t handle, float *W, float *Y, float *d_beta, int m, int n, int len, int r)
 {
     cudaError_t cudaStat;
     cublasStatus_t stat;
-    cublasHandle_t handle;
-    cublasCreate(&handle);
-    cublasSetPointerMode(handle, CUBLAS_POINTER_MODE_DEVICE);
-
+   
     int ONE = 1, ZERO = 0;
     float *d_Y_v;
     float *alpha;
@@ -146,8 +137,9 @@ void generate_WY(float *W, float *Y, float *d_beta, int m, int n, int len, int r
     cudaStat = cudaMalloc((void**)&d_Y_v, sizeof(float) * r);
     cudaStat = cudaMalloc((void**)&alpha, sizeof(float) * 1);
     cudaStat = cudaMalloc((void**)&beta, sizeof(float) * 1);
-    cudaStat = cudaMemset((void*)alpha, ONE, sizeof(float) * 1);
-    cudaStat = cudaMemset((void*)beta, ZERO, sizeof(float) * 1);
+    cudaStat = cudaMemcpy(alpha, &ONE, sizeof(float) * 1, cudaMemcpyHostToDevice);
+    cudaStat = cudaMemcpy(beta, &ZERO, sizeof(float) * 1, cudaMemcpyHostToDevice);
+
     cudaDeviceSynchronize();
     
     //mycopy<<<1024*16, 256>>>(Y, W, d_beta, len);
@@ -162,7 +154,6 @@ void generate_WY(float *W, float *Y, float *d_beta, int m, int n, int len, int r
         cudaDeviceSynchronize();
     }
 
-    cublasDestroy(handle);
     cudaFree(d_Y_v);
     cudaFree(alpha);
     cudaFree(beta);
@@ -170,18 +161,11 @@ void generate_WY(float *W, float *Y, float *d_beta, int m, int n, int len, int r
     return;
 }
 
-void apply_WY(float *d_A, float *W, float *Y, int m, int n, int len, int r)
+void apply_WY(cublasHandle_t handle, float *d_A, float *W, float *Y, int m, int n, int len, int r)
 {
-    if (len == m - n + r) {
-        return;
-    }
-
     cudaError_t cudaStat;
     cublasStatus_t stat;
-    cublasHandle_t handle;
-    cublasCreate(&handle);
-    cublasSetPointerMode(handle, CUBLAS_POINTER_MODE_DEVICE);
-
+    
     float *d_W_A;
     float *alpha;
     float *beta;
@@ -191,16 +175,17 @@ void apply_WY(float *d_A, float *W, float *Y, int m, int n, int len, int r)
     cudaStat = cudaMalloc((void**)&d_W_A, sizeof(float) * r * sub_n);
     cudaStat = cudaMalloc((void**)&alpha, sizeof(float) * 1);
     cudaStat = cudaMalloc((void**)&beta, sizeof(float) * 1);
-    cudaStat = cudaMemset((void*)alpha, ONE, sizeof(float) * 1);
-    cudaStat = cudaMemset((void*)beta, ZERO, sizeof(float) * 1);
+    cudaStat = cudaMemcpy(alpha, &ONE, sizeof(float) * 1, cudaMemcpyHostToDevice);
+    cudaStat = cudaMemcpy(beta, &ZERO, sizeof(float) * 1, cudaMemcpyHostToDevice);
 
+    cudaDeviceSynchronize();
     stat = cublasSgemm(handle, CUBLAS_OP_T, CUBLAS_OP_N, r, sub_n, sub_m, alpha, W, sub_m, d_A, m, beta, d_W_A, r);
     cudaDeviceSynchronize();
 
     stat = cublasSgemm(handle, CUBLAS_OP_N, CUBLAS_OP_N, sub_m, sub_n, r, alpha, Y, sub_m, d_W_A, r, alpha, d_A, m);
     cudaDeviceSynchronize();
 
-    cublasDestroy(handle);
+
     cudaFree(d_W_A);
     cudaFree(alpha);
     cudaFree(beta);
@@ -212,9 +197,9 @@ void unblocked_qr_calculate(float *d_A, int m, int n)
 {
     cudaError_t cudaStat;
     cublasStatus_t stat;
-    //cublasHandle_t handle;
-    //cublasCreate(&handle);
-    //cublasSetPointerMode(handle, CUBLAS_POINTER_MODE_DEVICE);
+    cublasHandle_t handle;
+    cublasCreate(&handle);
+    cublasSetPointerMode(handle, CUBLAS_POINTER_MODE_DEVICE);
 
     int len = 0;
     float *d_beta, *d_house_v;
@@ -227,11 +212,11 @@ void unblocked_qr_calculate(float *d_A, int m, int n)
         //householder reflector
         len = m - k;
         printf("%d access house()\n", k);
-        house(d_house_v, &d_A[IDX2C(k,k,m)], d_beta, len, m, n);
+        house(handle, d_house_v, &d_A[IDX2C(k,k,m)], d_beta, len, m, n);
 
         //apply householder reflector
         printf("%d access apply_house()\n", k);
-        apply_house(d_house_v, &d_A[IDX2C(k,k,m)], d_beta, len, m, n, 1);
+        apply_house(handle, d_house_v, &d_A[IDX2C(k,k,m)], d_beta, len, m, n, 1);
     }
 }
 
@@ -243,18 +228,21 @@ void blocked_qr_calculate(float *d_A, int m, int n, int r)
     int num_block = n / r;
     cudaError_t cudaStat;
     cublasStatus_t stat;
-    //cublasHandle_t handle;
-    //cublasCreate(&handle);
-    //cublasSetPointerMode(handle, CUBLAS_POINTER_MODE_DEVICE);
+    cublasHandle_t handle;
+    cublasCreate(&handle);
+    cublasSetPointerMode(handle, CUBLAS_POINTER_MODE_DEVICE);
 
     int len = 0, ZERO = 0, sub_len;
     int first_row_ind = 0, ind;
     float *d_beta, *d_house_v;
     float *W, *Y;
+    float A[m*n] = { 1, 1, 1, 1, -1, 4, 4, -1, 4, -2, 2, 0, 1, 2, 2, 3 };
+    float SW[m*r] = { 1, 1, 1, 1, 1, 1, 1, 1 };
     cudaStat = cudaMalloc((void**)&d_beta,sizeof(float)*r);
     cudaStat = cudaMalloc((void**)&d_house_v,sizeof(float)*m*r);
     cudaStat = cudaMalloc((void**)&W,sizeof(float)*m*r);
     cudaDeviceSynchronize();
+
 
     for (int k = 0; k < num_block; k++) {
         first_row_ind = k * r;
@@ -263,6 +251,7 @@ void blocked_qr_calculate(float *d_A, int m, int n, int r)
         cudaStat = cudaMemset((void*)d_beta, ZERO, sizeof(float) * r);
         cudaStat = cudaMemset((void*)d_house_v, ZERO, sizeof(float) * len * r);
         cudaStat = cudaMemset((void*)W, ZERO, sizeof(float) * len * r);
+        
         cudaDeviceSynchronize();
 
         for (int j = 0; j < r; j++) {
@@ -270,17 +259,36 @@ void blocked_qr_calculate(float *d_A, int m, int n, int r)
             sub_len = len - j;
             printf("block %d, row %d, access house()\n", k, j);
             //householder reflector
-            house(&d_house_v[IDX2C(j,j,len)], &d_A[IDX2C(ind,ind,m)], &d_beta[j], sub_len, m, n);
+            house(handle, &d_house_v[IDX2C(j,j,len)], &d_A[IDX2C(ind,ind,m)], &d_beta[j], sub_len, m, n);
             printf("block %d, row %d, access apply_house()\n", k, j);
             //apply householder reflector
-            apply_house(&d_house_v[IDX2C(j,j,len)], &d_A[IDX2C(ind,ind,m)], &d_beta[j], sub_len, m, n, r);
+            apply_house(handle, &d_house_v[IDX2C(j,j,len)], &d_A[IDX2C(ind,ind,m)], &d_beta[j], sub_len, m, n, r);
+            /*cudaStat = cudaMemcpy(A, d_A, sizeof(float)*m*n, cudaMemcpyDeviceToHost);
+            cudaDeviceSynchronize();
+
+            for (int i = 0; i < m*n; i++) {
+                printf("%f ", A[i]);
+            }
+            printf("\n");*/
         }
+        if(len == m - n + r)
+            return;
+
         printf("block %d, access grenerate_WY()\n", k);
-        generate_WY(W, d_house_v, d_beta, m, n, len, r);
+        generate_WY(handle, W, d_house_v, d_beta, m, n, len, r);
+        cudaDeviceSynchronize();
+        cudaStat = cudaMemcpy(SW, d_house_v, sizeof(float)*m*r, cudaMemcpyDeviceToHost);
+        cudaDeviceSynchronize();
+
+        for (int i = 0; i < m*r; i++) {
+            printf("%f ", SW[i]);
+        }
+        printf("\n");
 
         //apply W & Y
         printf("block %d, access apply_WY()\n", k);
-        apply_WY(&d_A[IDX2C(first_row_ind,first_row_ind+r,m)], W, Y, m, n, len, r);
+        apply_WY(handle, &d_A[IDX2C(first_row_ind,first_row_ind+r,m)], W, Y, m, n, len, r);
+        
     }
 }
 
@@ -297,7 +305,7 @@ int main()
 
     cudaDeviceSynchronize();
 
-    //unblocked_qr_calculate(d_A, m, n);
+//    unblocked_qr_calculate(d_A, m, n);
 
     r = 2;
     blocked_qr_calculate(d_A, m, n, r);
