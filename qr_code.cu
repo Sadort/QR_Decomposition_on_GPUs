@@ -158,11 +158,12 @@ void generate_WY(cublasHandle_t handle, float *W, const float *Y, float *d_beta,
     cudaStat = cudaMemcpy(alpha, &ONE, sizeof(float) * 1, cudaMemcpyHostToDevice);
     cudaStat = cudaMemcpy(beta, &ZERO, sizeof(float) * 1, cudaMemcpyHostToDevice);
 //    cudaStat = cudaMemcpy(d_Y_v, Y_v, sizeof(float) * r, cudaMemcpyHostToDevice);
-
+    initial_float<<<1024*16, 256>>>(d_Y_v, r);
     cudaDeviceSynchronize();
     
     //mycopy<<<1024*16, 256>>>(Y, W, d_beta, len);
     stat = cublasSaxpy(handle, len, d_beta, Y, 1, W, 1);
+    stat = cublasSaxpy(handle, len*(r-1), alpha, &Y[IDX2C(0,1,len)], 1, &W[IDX2C(0,1,len)], 1);
     cudaDeviceSynchronize();
     
     for (int j = 1; j < r; j++) {
@@ -172,11 +173,11 @@ void generate_WY(cublasHandle_t handle, float *W, const float *Y, float *d_beta,
         
         //ONE = -2.0;
         //cudaStat = cudaMemcpy(d_Y_v, &ONE, sizeof(float), cudaMemcpyHostToDevice);        
-        cudaStat = cudaMemcpy(Y_v, W, sizeof(float)*r*len, cudaMemcpyDeviceToHost);
+        cudaStat = cudaMemcpy(Y_v, d_Y_v, sizeof(float)*r, cudaMemcpyDeviceToHost);
         cudaDeviceSynchronize();
 
-        for (int i = 0; i < len*r; i++) {
-//            printf("%f ", Y_v[i]);
+        for (int i = 0; i < r; i++) {
+            printf("%f ", Y_v[i]);
         }
         printf("\n");
 
@@ -301,7 +302,7 @@ void blocked_qr_calculate(float *d_A, int m, int n, int r)
             cudaDeviceSynchronize();
 
             for (int i = 0; i < m*n; i++) {
-                printf("%f ", A[i]);
+                //printf("%f ", A[i]);
             }
             printf("\n");
         }
@@ -315,7 +316,7 @@ void blocked_qr_calculate(float *d_A, int m, int n, int r)
         cudaDeviceSynchronize();
 
         for (int i = 0; i < m*r; i++) {
-//            printf("%f ", SW[i]);
+            //printf("%f ", SW[i]);
         }
         printf("\n");
 
@@ -324,7 +325,7 @@ void blocked_qr_calculate(float *d_A, int m, int n, int r)
         cudaDeviceSynchronize();
 
         for (int i = 0; i < m*r; i++) {
-            printf("%f ", SW[i]);
+//            printf("%f ", SW[i]);
         }
         printf("\n");
 
