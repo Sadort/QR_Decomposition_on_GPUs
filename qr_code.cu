@@ -35,6 +35,15 @@ __global__ void mycopy(float *W, float *V, float *beta, int len)
 
 }
 
+__global__ void initial_float(float *in, int len)
+{
+    int tid = threadIdx.x + blockIdx.x * blockDim.x;
+    if(tid < len)
+    {
+        in[tid] = 0.0f;
+    }
+}
+
 /*
 Computes W = beta A V + alpha W
 */
@@ -270,10 +279,13 @@ void blocked_qr_calculate(float *d_A, int m, int n, int r)
         first_row_ind = k * r;
         len = m - first_row_ind;
         //printf("block %d\n", k);
-        cudaStat = cudaMemset((void*)d_beta, ZERO, sizeof(float) * r);
-        cudaStat = cudaMemset((void*)d_house_v, ZERO, sizeof(float) * len * r);
-        cudaStat = cudaMemset((void*)W, ZERO, sizeof(float) * len * r);
-        
+        //cudaStat = cudaMemset((void*)d_beta, ZERO, sizeof(float) * r);
+        //cudaStat = cudaMemset((void*)d_house_v, ZERO, sizeof(float) * len * r);
+        //cudaStat = cudaMemset((void*)W, ZERO, sizeof(float) * len * r);
+        initial_float<<<1024*16, 256>>>(d_beta, r);
+        initial_float<<<1024*16, 256>>>(d_house_v, len*r);
+        initial_float<<<1024*16, 256>>>(W, len*r);
+
         cudaDeviceSynchronize();
 
         for (int j = 0; j < r; j++) {
@@ -327,7 +339,10 @@ int main()
 {
     int m = 4, n = 4, i;
     int r = 1;
-    float A[m*n] = { 1, 1, 1, 1, -1, 4, 4, -1, 4, -2, 2, 0, 1, 1, -1, 1 };
+    float A[m*n] = { 1, -1, 4, 1,
+                     1, 4, -2, 1,
+                     1, 4, 2, -1,
+                     1, -1, 0, 1 };
     float *d_A;
 
     cudaError_t cudaStat;
@@ -336,7 +351,7 @@ int main()
 
     cudaDeviceSynchronize();
 
-//    unblocked_qr_calculate(d_A, m, n);
+    //unblocked_qr_calculate(d_A, m, n);
 
     r = 2;
     blocked_qr_calculate(d_A, m, n, r);
@@ -345,7 +360,7 @@ int main()
     cudaDeviceSynchronize();
 
     for (i = 0; i < m*n; i++) {
-//        printf("%f ", A[i]);
+        printf("%f ", A[i]);
     }
     printf("\n");
 
