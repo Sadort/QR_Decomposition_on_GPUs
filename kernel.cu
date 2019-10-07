@@ -287,36 +287,3 @@ void blocked_qr_calculate(float *d_A, int m, int n, int r)
         
     }
 }
-
-int main()
-{
-    int m = 512, n = 256, i;
-    int r = 8;
-//    float A[m*n] = { 1, -1, 4, 1,
-//                     1, 4, -2, 1,
-//                     1, 4, 2, -1,
-//                     1, -1, 0, 1 };
-    float *d_A;
-    
-    
-
-    cudaError_t cudaStat;
-    cudaStat = cudaMalloc((void**)&d_A,sizeof(float)*m*n);
-    cudaStat = cudaMemcpy(d_A, A, sizeof(float)*m*n, cudaMemcpyHostToDevice);
-
-    cudaDeviceSynchronize();
-
-    //unblocked_qr_calculate(d_A, m, n);
-
-    blocked_qr_calculate(d_A, m, n, r);
-
-    cudaStat = cudaMemcpy(A, d_A, sizeof(float)*m*n, cudaMemcpyDeviceToHost);
-    cudaDeviceSynchronize();
-
-//    for (i = 0; i < m*n; i++) {
-//        printf("%f ", A[i]);
-//    }
-//    printf("\n");
-
-    return 0;
-}
