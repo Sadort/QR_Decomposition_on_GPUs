@@ -1,8 +1,8 @@
-#include <stdio.h>
-#include <stdlib.h>
-#include <cuda_runtime.h>
-#include "cublas_v2.h"
-
+//#include <stdio.h>
+//#include <stdlib.h>
+//#include <cuda_runtime.h>
+//#include "cublas_v2.h"
+#include "kernel.h"
 #define IDX2C(i,j,ld) (((j)*(ld))+(i))
 
 __global__ void update_diagonal(float *d_v, float *d_x, float *d_norm)

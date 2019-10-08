@@ -1,9 +1,5 @@
-#include <stdio.h>
-#include <stdlib.h>
-#include <cuda_runtime.h>
+#include "kernel.h"
 #include <iostream>
-#include "cublas_v2.h"
-
 using namespace std;
 
 #define IDX2C(i,j,ld) (((j)*(ld))+(i))
