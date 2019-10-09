@@ -115,7 +115,6 @@ void apply_house(cublasHandle_t handle, float *d_v, float *d_A, float *d_beta, i
     cudaDeviceSynchronize();
     
     
-    cudaDeviceSynchronize();
     stat = cublasSgemm(handle, CUBLAS_OP_N, CUBLAS_OP_N, 1, sub_n, sub_m, alpha, d_v, 1, d_A, m, beta, d_v_A, 1);
     cudaDeviceSynchronize();
     
@@ -128,7 +127,8 @@ void apply_house(cublasHandle_t handle, float *d_v, float *d_A, float *d_beta, i
     cudaDeviceSynchronize();
     
     cudaFree(d_v_A);
-    
+    cudaFree(alpha);
+    cudaFree(beta);    
     return;
 
 }
@@ -147,13 +147,16 @@ void generate_WY(cublasHandle_t handle, float *W, const float *Y, float *d_beta,
     cudaStat = cudaMalloc((void**)&beta, sizeof(float) * 1);
     cudaStat = cudaMemcpy(alpha, &ONE, sizeof(float) * 1, cudaMemcpyHostToDevice);
     cudaStat = cudaMemcpy(beta, &ZERO, sizeof(float) * 1, cudaMemcpyHostToDevice);
+    cudaDeviceSynchronize();
 
-    initial_float<<<1024*16, 256>>>(d_Y_v, r);
+    initial_float<<<1024*256, 256>>>(d_Y_v, r);
     cudaDeviceSynchronize();
     
     //mycopy<<<1024*16, 256>>>(Y, W, d_beta, len);
     stat = cublasSaxpy(handle, len, d_beta, Y, 1, W, 1);
-    stat = cublasSaxpy(handle, len*(r-1), alpha, &Y[IDX2C(0,1,len)], 1, &W[IDX2C(0,1,len)], 1);
+    cudaDeviceSynchronize();
+    //stat = cublasSaxpy(handle, len*(r-1), alpha, &Y[IDX2C(0,1,len)], 1, &W[IDX2C(0,1,len)], 1);
+    stat = cublasScopy(handle, len*(r-1), &Y[IDX2C(0,1,len)], 1, &W[IDX2C(0,1,len)], 1);
     cudaDeviceSynchronize();
     
     for (int j = 1; j < r; j++) {
@@ -221,13 +224,16 @@ void unblocked_qr_calculate(float *d_A, int m, int n)
 
         //householder reflector
         len = m - k;
-        printf("%d access house()\n", k);
+        //printf("%d access house()\n", k);
         house(handle, d_house_v, &d_A[IDX2C(k,k,m)], d_beta, len, m, n);
 
         //apply householder reflector
-        printf("%d access apply_house()\n", k);
+        //printf("%d access apply_house()\n", k);
         apply_house(handle, d_house_v, &d_A[IDX2C(k,k,m)], d_beta, len, m, n, 1);
     }
+    cudaFree(d_beta);
+    cudaFree(d_house_v);
+    return;
 }
 
 void blocked_qr_calculate(float *d_A, int m, int n, int r)
@@ -257,20 +263,20 @@ void blocked_qr_calculate(float *d_A, int m, int n, int r)
     for (int k = 0; k < num_block; k++) {
         first_row_ind = k * r;
         len = m - first_row_ind;
-        initial_float<<<1024*16, 256>>>(d_beta, r);
-        initial_float<<<1024*16, 256>>>(d_house_v, len*r);
-        initial_float<<<1024*16, 256>>>(W, len*r);
+        initial_float<<<1024*256, 256>>>(d_beta, r);
+        initial_float<<<1024*256, 256>>>(d_house_v, len*r);
+        initial_float<<<1024*256, 256>>>(W, len*r);
 
         cudaDeviceSynchronize();
 
         for (int j = 0; j < r; j++) {
             ind = first_row_ind + j;
             sub_len = len - j;
-            printf("block %d, row %d, access house()\n", k, j);
+            //printf("block %d, row %d, access house()\n", k, j);
             //householder reflector
             house(handle, &d_house_v[IDX2C(j,j,len)], &d_A[IDX2C(ind,ind,m)], &d_beta[j], sub_len, m, n);
             
-            printf("block %d, row %d, access apply_house()\n", k, j);
+            //printf("block %d, row %d, access apply_house()\n", k, j);
             //apply householder reflector
             apply_house(handle, &d_house_v[IDX2C(j,j,len)], &d_A[IDX2C(ind,ind,m)], &d_beta[j], sub_len, m, n, r);
            
@@ -278,12 +284,17 @@ void blocked_qr_calculate(float *d_A, int m, int n, int r)
         if(len == m - n + r)
             return;
 
-        printf("block %d, access grenerate_WY()\n", k);
+        //printf("block %d, access grenerate_WY()\n", k);
         generate_WY(handle, W, d_house_v, d_beta, m, n, len, r);
         
         //apply W & Y
-        printf("block %d, access apply_WY()\n", k);
+        //printf("block %d, access apply_WY()\n", k);
         apply_WY(handle, &d_A[IDX2C(first_row_ind,first_row_ind+r,m)], W, d_house_v, m, n, len, r);
         
     }
+
+    cudaFree(W);
+    cudaFree(d_house_v);
+    cudaFree(d_beta);
+    return;
 }

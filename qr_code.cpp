@@ -39,13 +39,13 @@ void verify(int m, int n)
     int flag = 0;
     for (i = 0; i < n*n; i++) {
         if ((X[i] + Y[i]) * (X[i] + Y[i]) > 0.0001 && (X[i] - Y[i]) * (X[i] - Y[i]) > 0.0001) {
-            printf("row %d col %d, %f, %f\n", i/n, i%n, X[i], Y[i]);
-            flag = 1;
+            //printf("row %d col %d, %f, %f\n", i/n, i%n, X[i], Y[i]);
+            flag += 1;
         }
     }
-    if(flag == 1)
+    if(flag > 0)
     {
-        printf("Verification Failed.\n\n");
+        printf(" flag = %d, Verification Failed.\n\n", flag);
         return;
     }
     printf("Verification complete.\n\n");
@@ -54,7 +54,7 @@ void verify(int m, int n)
 int main()
 {
     int m = 512, n = 256, i, j;
-    int r = 64;
+    int r = 256;
     int num = m / n;
     char filename [50];
 //    float A[m*n] = { 1, -1, 4, 1,
@@ -62,7 +62,7 @@ int main()
 //                     1, 4, 2, -1,
 //                     1, -1, 0, 1 };
     float *A, *d_A;
-    printf("Matrix size %i x %i.\n\n", m, n);
+    printf("Matrix size %i x %i. r = %d.\n\n", m, n, r);
     
     A = (float *)malloc(m*n * sizeof(float));
     
@@ -89,7 +89,7 @@ int main()
     cudaEventCreate(&start);
     cudaEventCreate(&stop);
     float milliseconds = 0, totalmseconds = 0;
-    int iterations = 20;
+    int iterations = 10;
     for(i = 0; i < iterations; i++)
     {
         cudaEventRecord(start);
@@ -105,9 +105,10 @@ int main()
         totalmseconds += milliseconds;
         if(i == iterations - 1) break;
         cudaMemcpy( d_A, A, m*n*sizeof(float), cudaMemcpyHostToDevice );
+        cudaDeviceSynchronize();
     }
 
-    printf("Elapsed time: %2.13f ms.", totalmseconds / iterations);
+    printf("Elapsed time: %f ms.", totalmseconds / iterations);
 
     cudaStat = cudaMemcpy(A, d_A, sizeof(float)*m*n, cudaMemcpyDeviceToHost);
     cudaDeviceSynchronize();
