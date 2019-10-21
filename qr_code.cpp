@@ -1,20 +1,23 @@
+#include <cmath>
+#include <assert.h>
 #include "kernel.h"
 #include <iostream>
 #include <fstream>
+#include <string>
 using namespace std;
 
 #define IDX2C(i,j,ld) (((j)*(ld))+(i))
 
-extern void blcoked_qr_calculate(float *d_A, int m, int n, int r);
-extern void unblocked_qr_calculate(float *d_A, int m, int n);
+extern void blcoked_qr_calculate(double *d_A, int m, int n, int r);
+extern void unblocked_qr_calculate(double *d_A, int m, int n);
 
 void verify(int m, int n)
 {
-    float *X, *Y;
+    double *X, *Y;
     int i;
     int num = m / n;
-    X = (float *)malloc(n*n * sizeof(float));
-    Y = (float *)malloc(n*n * sizeof(float));
+    X = (double *)malloc(n*n * sizeof(double));
+    Y = (double *)malloc(n*n * sizeof(double));
     char filename [50];
     sprintf(filename, "o_%d_%d_%d.txt", num, n, n);
     ifstream in_matlab(filename);
@@ -37,14 +40,22 @@ void verify(int m, int n)
     //printMatrix(m, n, X, m, "matlab_result");
     //printMatrix(m, n, Y, m, "cuda_result");
     int flag = 0;
+    double sum = 0;
+    double maxerror = 0;
     for (i = 0; i < n*n; i++) {
+        double error = std::abs(std::abs(X[i]) - std::abs(Y[i]));
+        sum += error;
+        if(error > maxerror) maxerror = error;
         if ((X[i] + Y[i]) * (X[i] + Y[i]) > 0.0001 && (X[i] - Y[i]) * (X[i] - Y[i]) > 0.0001) {
             //printf("row %d col %d, %f, %f\n", i/n, i%n, X[i], Y[i]);
             flag += 1;
         }
     }
+    printf("sum error: %lf\n", sum);
+    printf("max error: %lf\n", maxerror);
     if(flag > 0)
     {
+        printf(" Incorrectness = %f, Verification Failed.\n\n", (float)flag/(n*n));
         printf(" flag = %d, Verification Failed.\n\n", flag);
         return;
     }
@@ -53,18 +64,20 @@ void verify(int m, int n)
 
 int main()
 {
-    int m = 512, n = 256, i, j;
-    int r = 256;
+    int m = 8192, n = 4096, i, j;
+//    int r = 4096;
+    int r;
+    cin >> r;
     int num = m / n;
     char filename [50];
 //    float A[m*n] = { 1, -1, 4, 1,
 //                     1, 4, -2, 1,
 //                     1, 4, 2, -1,
 //                     1, -1, 0, 1 };
-    float *A, *d_A;
+    double *A, *d_A;
     printf("Matrix size %i x %i. r = %d.\n\n", m, n, r);
     
-    A = (float *)malloc(m*n * sizeof(float));
+    A = (double *)malloc(m*n * sizeof(double));
     
     sprintf(filename, "i_%d_%d_%d.txt", num, n, n);
     ifstream in(filename);
@@ -80,9 +93,11 @@ int main()
     in.close();
 
     cudaError_t cudaStat;
-    cudaStat = cudaMalloc((void**)&d_A,sizeof(float)*m*n);
-    cudaStat = cudaMemcpy(d_A, A, sizeof(float)*m*n, cudaMemcpyHostToDevice);
-
+    cudaStat = cudaMalloc((void**)&d_A,sizeof(double)*m*n);
+    assert(cudaSuccess == cudaStat);
+    cudaStat = cudaMemcpy(d_A, A, sizeof(double)*m*n, cudaMemcpyHostToDevice);
+    assert(cudaSuccess == cudaStat);
+/*
     cudaDeviceSynchronize();
 
     cudaEvent_t start, stop;
@@ -93,11 +108,11 @@ int main()
     for(i = 0; i < iterations; i++)
     {
         cudaEventRecord(start);
-
+*/
 //        unblocked_qr_calculate(d_A, m, n);
 
-        blocked_qr_calculate(d_A, m, n, r);
-
+    blocked_qr_calculate(d_A, m, n, r);
+/*
         cudaDeviceSynchronize();
         cudaEventRecord(stop);
         cudaEventSynchronize(stop);
@@ -109,8 +124,9 @@ int main()
     }
 
     printf("Elapsed time: %f ms.", totalmseconds / iterations);
-
-    cudaStat = cudaMemcpy(A, d_A, sizeof(float)*m*n, cudaMemcpyDeviceToHost);
+*/
+    cudaStat = cudaMemcpy(A, d_A, sizeof(double)*m*n, cudaMemcpyDeviceToHost);
+    assert(cudaSuccess == cudaStat);
     cudaDeviceSynchronize();
 
     sprintf(filename, "cuda_%d_%d_%d.txt", num, n, n);
@@ -120,6 +136,7 @@ int main()
             for (j = 0; j < n; j++) {
                 out << A[IDX2C(i,j,m)] << " ";
             }
+            out << endl;
         }
         out.close();
     }
