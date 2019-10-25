@@ -1,4 +1,4 @@
-//#include <stdio.h>
+#include <stdio.h>
 //#include <stdlib.h>
 //#include <cuda_runtime.h>
 //#include "cublas_v2.h"
@@ -24,7 +24,7 @@ __global__ void update_beta(double *d_beta, double *d_dotpro)
     int tid = threadIdx.x + blockIdx.x * blockDim.x;
     if(tid == 1)
     {
-        *d_beta = (double)(-2 / *d_dotpro);
+        *d_beta = (double)-2 / *d_dotpro;
     }
 }
 
@@ -81,6 +81,7 @@ void house(cublasHandle_t handle, double *d_v, double *d_x, double *d_beta, int 
     assert(cudaSuccess == cudaStat);
     cudaStat = cudaMalloc((void**)&d_dotpro, sizeof(double) * 1);
     assert(cudaSuccess == cudaStat);
+    cudaDeviceSynchronize();
 
     cudaStat = cudaMemcpy(d_norm, &ZERO, sizeof(double) * 1, cudaMemcpyHostToDevice);
     assert(cudaSuccess == cudaStat);
@@ -135,6 +136,7 @@ void apply_house(cublasHandle_t handle, double *d_v, double *d_A, double *d_beta
     double *d_v_A;
     cudaStat = cudaMalloc((void**)&d_v_A, sizeof(double) * sub_n);
     //cudaStat = cudaMemset((void*)d_v_A, ZERO, sizeof(float) * sub_n);
+    cudaDeviceSynchronize();
     assert(cudaSuccess == cudaStat);
  
     initial_float<<<1024*64, 1024>>>(d_v_A, sub_n);
@@ -148,6 +150,8 @@ void apply_house(cublasHandle_t handle, double *d_v, double *d_A, double *d_beta
     assert(cudaSuccess == cudaStat);
     cudaStat = cudaMalloc((void**)&beta, sizeof(double) * 1);
     assert(cudaSuccess == cudaStat);
+    cudaDeviceSynchronize();
+
     cudaStat = cudaMemcpy(alpha, &ONE, sizeof(double) * 1, cudaMemcpyHostToDevice);
     assert(cudaSuccess == cudaStat);
     cudaStat = cudaMemcpy(beta, &ZERO, sizeof(double) * 1, cudaMemcpyHostToDevice);
@@ -179,14 +183,18 @@ void generate_WY(cublasHandle_t handle, double *W, const double *Y, double *d_be
     cublasStatus_t stat;
    
     double ONE = 1.0, ZERO = 0.0;
-    double *d_Y_v;
+    double *d_Y_v, *z;
     double *alpha;
     double *beta;
     cudaStat = cudaMalloc((void**)&d_Y_v, sizeof(double) * r);
     assert(cudaSuccess == cudaStat);
+    cudaStat = cudaMalloc((void**)&z, sizeof(double) * len);
+    assert(cudaSuccess == cudaStat);
     cudaStat = cudaMalloc((void**)&alpha, sizeof(double) * 1);
     assert(cudaSuccess == cudaStat);
     cudaStat = cudaMalloc((void**)&beta, sizeof(double) * 1);
+    cudaDeviceSynchronize();
+
     assert(cudaSuccess == cudaStat);
     cudaStat = cudaMemcpy(alpha, &ONE, sizeof(double) * 1, cudaMemcpyHostToDevice);
     assert(cudaSuccess == cudaStat);
@@ -205,22 +213,31 @@ void generate_WY(cublasHandle_t handle, double *W, const double *Y, double *d_be
     assert(stat == CUBLAS_STATUS_SUCCESS);
     //stat = cublasSaxpy(handle, len*(r-1), alpha, &Y[IDX2C(0,1,len)], 1, &W[IDX2C(0,1,len)], 1);
 
-    stat = cublasDcopy(handle, len*(r-1), &Y[IDX2C(0,1,len)], 1, &W[IDX2C(0,1,len)], 1);
-    cudaDeviceSynchronize();
-    assert(stat == CUBLAS_STATUS_SUCCESS);
+    //stat = cublasDcopy(handle, len*(r-1), &Y[IDX2C(0,1,len)], 1, &W[IDX2C(0,1,len)], 1);
+    //cudaDeviceSynchronize();
+    //assert(stat == CUBLAS_STATUS_SUCCESS);
 
     for (int j = 1; j < r; j++) {
+        stat = cublasDcopy(handle, len, &Y[IDX2C(0,j,len)], 1, z, 1);
+        cudaDeviceSynchronize();
+        assert(stat == CUBLAS_STATUS_SUCCESS);
+
         stat = cublasDgemv(handle, CUBLAS_OP_T, len, j, alpha, Y, len, &Y[IDX2C(0,j,len)], 1, beta, d_Y_v, 1);
         cudaDeviceSynchronize();
         assert(stat == CUBLAS_STATUS_SUCCESS);
 
-        stat = cublasDgemv(handle, CUBLAS_OP_N, len, j, &d_beta[j], W, len, d_Y_v, 1, &d_beta[j], &W[IDX2C(0,j,len)], 1);
+        stat = cublasDgemv(handle, CUBLAS_OP_N, len, j, &d_beta[j], W, len, d_Y_v, 1, &d_beta[j], z, 1);
+        cudaDeviceSynchronize();
+        assert(stat == CUBLAS_STATUS_SUCCESS);
+
+        stat = cublasDcopy(handle, len, z, 1, &W[IDX2C(0,j,len)], 1);
         cudaDeviceSynchronize();
         assert(stat == CUBLAS_STATUS_SUCCESS);
 
     }
 
     cudaFree(d_Y_v);
+    cudaFree(z);
     cudaFree(alpha);
     cudaFree(beta);
 
@@ -244,20 +261,27 @@ void apply_WY(cublasHandle_t handle, double *d_A, double *W, double *Y, int m, i
     assert(cudaSuccess == cudaStat);
     cudaStat = cudaMalloc((void**)&beta, sizeof(double) * 1);
     assert(cudaSuccess == cudaStat);
+    cudaDeviceSynchronize();
+    
     cudaStat = cudaMemcpy(alpha, &ONE, sizeof(double) * 1, cudaMemcpyHostToDevice);
     assert(cudaSuccess == cudaStat);
     cudaStat = cudaMemcpy(beta, &ZERO, sizeof(double) * 1, cudaMemcpyHostToDevice);
     assert(cudaSuccess == cudaStat);
+    cudaDeviceSynchronize();
 
     initial_float<<<1024*64, 1024>>>(d_W_A, r*sub_n);
     cudaDeviceSynchronize();
 
     assert(cudaGetLastError() == cudaSuccess);
 
-    cudaDeviceSynchronize();
     stat = cublasDgemm(handle, CUBLAS_OP_T, CUBLAS_OP_N, r, sub_n, sub_m, alpha, W, sub_m, d_A, m, beta, d_W_A, r);
     cudaDeviceSynchronize();
     assert(stat == CUBLAS_STATUS_SUCCESS);
+    
+    cudaDeviceSynchronize();
+    cudaDeviceSynchronize();
+    cudaDeviceSynchronize();
+    cudaDeviceSynchronize();
 
     stat = cublasDgemm(handle, CUBLAS_OP_N, CUBLAS_OP_N, sub_m, sub_n, r, alpha, Y, sub_m, d_W_A, r, alpha, d_A, m);
     cudaDeviceSynchronize();
@@ -358,7 +382,7 @@ void blocked_qr_calculate(double *d_A, int m, int n, int r)
     cudaEventCreate(&start);
     cudaEventCreate(&stop);
     float milliseconds = 0, housetime = 0, applytime = 0, WYtime = 0, applyWYtime = 0;
-
+    //num_block = 1;
     for (int k = 0; k < num_block; k++) {
         first_row_ind = k * r;
         len = m - first_row_ind;
@@ -423,6 +447,29 @@ void blocked_qr_calculate(double *d_A, int m, int n, int r)
         cudaEventElapsedTime(&milliseconds, start, stop);
         applyWYtime += milliseconds;
 
+/*        if(k == 0)
+        {
+            double *h_W;
+            h_W = (double *)malloc(m*r * sizeof(double));
+            cudaMemcpy(h_W, W, sizeof(double) * m*r, cudaMemcpyDeviceToHost);
+            FILE * fp;
+            int s, t;
+   
+            fp = fopen ("cuda_2_4096_4096_W.txt","w");
+ 
+          
+            for(s = 0; s < m; s++){
+                for(t = 0; t < r; t++)
+                {
+                    fprintf (fp, "%f ", h_W[IDX2C(s,t,m)]);
+                }
+                fprintf (fp, "\n");
+            }
+ 
+      
+            fclose (fp);
+        }
+*/
     }
 
     printf("house: %f \n", housetime);

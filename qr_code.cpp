@@ -11,10 +11,10 @@ using namespace std;
 extern void blcoked_qr_calculate(double *d_A, int m, int n, int r);
 extern void unblocked_qr_calculate(double *d_A, int m, int n);
 
-void verify(int m, int n)
+void verifyQR(int m, int n)
 {
     double *X, *Y;
-    int i;
+    int i, j;
     int num = m / n;
     X = (double *)malloc(n*n * sizeof(double));
     Y = (double *)malloc(n*n * sizeof(double));
@@ -40,9 +40,83 @@ void verify(int m, int n)
     //printMatrix(m, n, X, m, "matlab_result");
     //printMatrix(m, n, Y, m, "cuda_result");
     int flag = 0;
+    int first_wrong_row = -1;
+    int first_wrong_col = -1;
     double sum = 0;
     double maxerror = 0;
     for (i = 0; i < n*n; i++) {
+        double error = std::abs(std::abs(X[i]) - std::abs(Y[i]));
+        sum += error;
+        if(error > maxerror) maxerror = error;
+        if ((X[i] + Y[i]) * (X[i] + Y[i]) > 0.0001 && (X[i] - Y[i]) * (X[i] - Y[i]) > 0.0001) 
+        {
+            //printf("row %d col %d, %f, %f\n", i/n, i%n, X[i], Y[i]);
+            if(first_wrong_col == -1) 
+            {
+                first_wrong_col = i%n;
+                first_wrong_row = i/n;
+            }
+            flag += 1;
+        }
+    }
+    printf("Scan row-by-row: first wrong row %d col %d\n", first_wrong_row, first_wrong_col);
+    first_wrong_row = -1;
+    first_wrong_col = -1;
+    for(i = 0; i < n; i++)
+        for(j = 0; j < n; j++)
+        {
+            if(std::abs(std::abs(X[IDX2C(i,j,n)]) - std::abs(Y[IDX2C(i,j,n)])) > 0.0001)
+            {
+                if(first_wrong_col == -1)
+                {
+                    first_wrong_col = i;
+                    first_wrong_row = j;
+                }
+            }
+        }
+    printf("Scan col-by-col: first wrong row %d col %d\n", first_wrong_row, first_wrong_col);
+    printf("sum error: %lf\n", sum);
+    printf("max error: %lf\n", maxerror);
+    if(flag > 0)
+    {
+        printf(" Incorrectness = %f, Verification Failed.\n\n", (float)flag/(n*n));
+        printf(" flag = %d, Verification Failed.\n\n", flag);
+        return;
+    }
+    printf("Verification complete.\n\n");
+}
+
+void verifyW(int m, int r)
+{
+    double *X, *Y;
+    int i;
+    X = (double *)malloc(m*r * sizeof(double));
+    Y = (double *)malloc(m*r * sizeof(double));
+    char filename [50];
+    sprintf(filename, "o_2_4096_4096_W.txt");
+    ifstream in_matlab(filename);
+    sprintf(filename, "cuda_2_4096_4096_W.txt");
+    ifstream in_cuda(filename);
+    
+    if (in_matlab == NULL || in_cuda == NULL) {
+        printf("Error Reading File\n");
+        exit(0);
+    }
+    
+    for (i = 0; i < m*r; i++) {
+        in_matlab >> X[i];
+        in_cuda >> Y[i];
+    }
+    
+    in_matlab.close();
+    in_cuda.close();
+    
+    //printMatrix(m, n, X, m, "matlab_result");
+    //printMatrix(m, n, Y, m, "cuda_result");
+    int flag = 0;
+    double sum = 0;
+    double maxerror = 0;
+    for (i = 0; i < m*r; i++) {
         double error = std::abs(std::abs(X[i]) - std::abs(Y[i]));
         sum += error;
         if(error > maxerror) maxerror = error;
@@ -55,7 +129,7 @@ void verify(int m, int n)
     printf("max error: %lf\n", maxerror);
     if(flag > 0)
     {
-        printf(" Incorrectness = %f, Verification Failed.\n\n", (float)flag/(n*n));
+        printf(" Incorrectness = %f, Verification Failed.\n\n", (float)flag/(m*r));
         printf(" flag = %d, Verification Failed.\n\n", flag);
         return;
     }
@@ -97,6 +171,7 @@ int main()
     assert(cudaSuccess == cudaStat);
     cudaStat = cudaMemcpy(d_A, A, sizeof(double)*m*n, cudaMemcpyHostToDevice);
     assert(cudaSuccess == cudaStat);
+    cudaDeviceSynchronize();
 /*
     cudaDeviceSynchronize();
 
@@ -109,9 +184,10 @@ int main()
     {
         cudaEventRecord(start);
 */
-//        unblocked_qr_calculate(d_A, m, n);
-
-    blocked_qr_calculate(d_A, m, n, r);
+        if(r == 1)
+            unblocked_qr_calculate(d_A, m, n);
+        else
+            blocked_qr_calculate(d_A, m, n, r);
 /*
         cudaDeviceSynchronize();
         cudaEventRecord(stop);
@@ -140,8 +216,10 @@ int main()
         }
         out.close();
     }
+
+//    verifyW(m,r);
     
-    verify(m, n);
+    verifyQR(m, n);
     
 //    for (i = 0; i < m*n; i++) {
 //        printf("%f ", A[i]);
