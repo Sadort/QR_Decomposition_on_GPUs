@@ -47,10 +47,7 @@ __global__ void initial_float(double *in, int len)
     }
 }
 
-__global void GetHouse()
-{
-    
-}
+__global__ void get_norm(double *d_A, int m, int n, )
 
 /*
 Computes W = beta A V + alpha W
@@ -283,6 +280,7 @@ void blocked_qr_calculate(double *d_A, int m, int n, int r)
     cudaEventCreate(&start);
     cudaEventCreate(&stop);
     float milliseconds = 0, housetime = 0, applytime = 0, WYtime = 0, applyWYtime = 0;
+    
     for (int k = 0; k < num_block; k++) {
         first_row_ind = k * r;
         len = m - first_row_ind;
