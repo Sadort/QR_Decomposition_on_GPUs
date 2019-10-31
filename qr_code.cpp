@@ -48,7 +48,7 @@ void verifyQR(int m, int n)
         double error = std::abs(std::abs(X[i]) - std::abs(Y[i]));
         sum += error;
         if(error > maxerror) maxerror = error;
-        if ((X[i] + Y[i]) * (X[i] + Y[i]) > 0.0001 && (X[i] - Y[i]) * (X[i] - Y[i]) > 0.0001) 
+        if (std::abs(std::abs(X[i]) - std::abs(Y[i])) > 0.0001) 
         {
             //printf("row %d col %d, %f, %f\n", i/n, i%n, X[i], Y[i]);
             if(first_wrong_col == -1) 
@@ -138,7 +138,7 @@ void verifyW(int m, int r)
 
 int main()
 {
-    int m = 8192, n = 4096, i, j;
+    int m = 512, n = 256, i, j;
 //    int r = 4096;
     int r;
     cin >> r;
