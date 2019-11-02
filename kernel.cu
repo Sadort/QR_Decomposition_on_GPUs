@@ -5,6 +5,7 @@
 #include "kernel.h"
 #include <assert.h>
 #define IDX2C(i,j,ld) (((j)*(ld))+(i))
+#define BLOCK_SIZE 512
 
 __global__ void update_diagonal(double *d_v, double *d_x, double *d_norm)
 { 
@@ -47,12 +48,33 @@ __global__ void initial_float(double *in, int len)
     }
 }
 
-__global__ void get_norm(double *d_A, int m, int n, )
+__global__ void get_norm(double *d_A, double *norm, int m, int n, int len, int r)
+{
+    __shared__ double sum[BLOCK_SIZE*2];
+    
+    unsigned int tid = threadIdx.x;
+    unsigned int start = blockIdx.x*m;
+    
+    if (tid < len)
+        sum[tid] = d_A[start+tid] * d_A[start+tid];
+    else
+        sum[tid] = 0;
+    if (BLOCK_SIZE + tid < len)
+        sum[BLOCK_SIZE + tid] = d_A[start+BLOCK_SIZE+tid] * d_A[start+BLOCK_SIZE+tid];
+    else
+        sum[BLOCK_SIZE + tid] = 0;
 
-/*
-Computes W = beta A V + alpha W
-*/
-//__global__ void gtSgemv(float alpha, float beta, float *A, float *V, int M, int N, float *W)
+    for (unsigned int stride = BLOCK_SIZE; stride >= 1; stride /= 2)
+    {
+        __syncthreads();
+        if (tid < stride)
+            sum[tid] += sum[tid + stride];
+    }
+    __syncthreads();
+    norm[blockIdx.x] = sqrt((double)sum[0]);
+    
+}
+
 
 void initMemory(double *da, int size)
 {
@@ -66,27 +88,23 @@ void initMemory(double *da, int size)
     free(ha);
 }
 
-void house(cublasHandle_t handle, double *d_v, double *d_x, double *d_beta, int len, int m, int n)
+void house(cublasHandle_t handle, double *d_norm, double *d_v, double *d_x, double *d_beta, int len, int m, int n, int r)
 {
     cudaError_t cudaStat;
     cublasStatus_t stat;
 
-    double *d_norm, *d_dotpro;
+    double *d_dotpro;
     double ZERO = 0.0;
+    int block_ind = (m - len) / r;
     
-    cudaStat = cudaMalloc((void**)&d_norm, sizeof(double) * 1);
     //assert(cudaSuccess == cudaStat);
     cudaStat = cudaMalloc((void**)&d_dotpro, sizeof(double) * 1);
-
-    cudaStat = cudaMemcpy(d_norm, &ZERO, sizeof(double) * 1, cudaMemcpyHostToDevice);
     cudaStat = cudaMemcpy(d_dotpro, &ZERO, sizeof(double) * 1, cudaMemcpyHostToDevice);  
     cudaDeviceSynchronize();
 
-    stat = cublasDnrm2(handle, len, d_x, 1, d_norm);
-
     stat = cublasDcopy(handle, len, d_x, 1, d_v, 1);
 
-    update_diagonal<<<1, 8>>>(d_v, d_x, d_norm);
+    update_diagonal<<<1, 8>>>(d_v, d_x, &d_norm[block_ind]);
     cudaDeviceSynchronize();
 
     stat = cublasDdot(handle, len, d_v, 1, d_v, 1, d_dotpro);
@@ -269,12 +287,13 @@ void blocked_qr_calculate(double *d_A, int m, int n, int r)
 
     int len = 0, sub_len;
     int first_row_ind = 0, ind;
-    double *d_beta, *d_house_v;
+    double *d_beta, *d_house_v, *d_norm;
     double *W;
     
     cudaStat = cudaMalloc((void**)&d_beta,sizeof(double)*r);
     cudaStat = cudaMalloc((void**)&d_house_v,sizeof(double)*m*r);
     cudaStat = cudaMalloc((void**)&W,sizeof(double)*m*r);
+    cudaStat = cudaMalloc((void**)&d_norm,sizeof(double)*r);
 
     cudaEvent_t start, stop;
     cudaEventCreate(&start);
@@ -288,6 +307,10 @@ void blocked_qr_calculate(double *d_A, int m, int n, int r)
         initMemory(d_beta, r);
         initMemory(d_house_v, len*r);
         initMemory(W, len*r);
+        initMemory(d_norm, r);
+        
+        //norm
+        get_norm<<<r, BLOCK_SIZE>>>(&d_A[IDX2C(first_row_ind,first_row_ind,m)], d_norm, m, n, len, r)
 
         for (int j = 0; j < r; j++) {
             ind = first_row_ind + j;
@@ -297,7 +320,7 @@ void blocked_qr_calculate(double *d_A, int m, int n, int r)
 
             //printf("block %d, row %d, access house()\n", k, j);
             //householder reflector
-            house(handle, &d_house_v[IDX2C(j,j,len)], &d_A[IDX2C(ind,ind,m)], &d_beta[j], sub_len, m, n);
+            house(handle, d_norm, &d_house_v[IDX2C(j,j,len)], &d_A[IDX2C(ind,ind,m)], &d_beta[j], sub_len, m, n, r);
             
             cudaEventRecord(stop);
             cudaEventSynchronize(stop);
