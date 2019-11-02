@@ -252,7 +252,7 @@ void unblocked_qr_calculate(double *d_A, int m, int n)
         cudaEventRecord(start);
 
         //printf("%d access house()\n", k);
-        house(handle, d_norm, d_house_v, &d_A[IDX2C(k,k,m)], d_beta, len, m, n, r);
+        house(handle, d_norm, d_house_v, &d_A[IDX2C(k,k,m)], d_beta, len, m, n);
 
         cudaEventRecord(stop);
         cudaEventSynchronize(stop);
