@@ -242,7 +242,7 @@ void unblocked_qr_calculate(double *d_A, int m, int n)
     float milliseconds = 0, housetime = 0, applytime = 0;
     
     //norm
-    get_norm<<<n, BLOCK_SIZE>>>(d_A, d_norm, m, n, len)
+    get_norm<<<n, BLOCK_SIZE>>>(d_A, d_norm, m, n, len);
 
     for (int k = 0; k < n; k++) {
 
@@ -315,7 +315,7 @@ void blocked_qr_calculate(double *d_A, int m, int n, int r)
         initMemory(d_norm, r);
         
         //norm
-        get_norm<<<r, BLOCK_SIZE>>>(&d_A[IDX2C(first_row_ind,first_row_ind,m)], d_norm, m, n, len)
+        get_norm<<<r, BLOCK_SIZE>>>(&d_A[IDX2C(first_row_ind,first_row_ind,m)], d_norm, m, n, len);
 
         for (int j = 0; j < r; j++) {
             ind = first_row_ind + j;
