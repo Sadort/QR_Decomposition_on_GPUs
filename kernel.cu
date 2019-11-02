@@ -48,7 +48,7 @@ __global__ void initial_float(double *in, int len)
     }
 }
 
-__global__ void get_norm(double *d_A, double *norm, int m, int n, int len, int r)
+__global__ void get_norm(double *d_A, double *norm, int m, int n, int len)
 {
     __shared__ double sum[BLOCK_SIZE*2];
     
@@ -228,16 +228,21 @@ void unblocked_qr_calculate(double *d_A, int m, int n)
     cublasSetPointerMode(handle, CUBLAS_POINTER_MODE_DEVICE);
 
     int len = 0;
-    double *d_beta, *d_house_v;
+    double *d_beta, *d_house_v, *d_norm;
     cudaStat = cudaMalloc((void**)&d_beta,sizeof(double)*1);
     cudaStat = cudaMalloc((void**)&d_house_v,sizeof(double)*m);
+    cudaStat = cudaMalloc((void**)&d_norm,sizeof(double)*n);
 
     initMemory(d_house_v, m);
+    initMemory(d_norm, n);
 
     cudaEvent_t start, stop;
     cudaEventCreate(&start);
     cudaEventCreate(&stop);
     float milliseconds = 0, housetime = 0, applytime = 0;
+    
+    //norm
+    get_norm<<<n, BLOCK_SIZE>>>(d_A, d_norm, m, n, len)
 
     for (int k = 0; k < n; k++) {
 
@@ -247,7 +252,7 @@ void unblocked_qr_calculate(double *d_A, int m, int n)
         cudaEventRecord(start);
 
         //printf("%d access house()\n", k);
-        house(handle, d_house_v, &d_A[IDX2C(k,k,m)], d_beta, len, m, n);
+        house(handle, d_norm d_house_v, &d_A[IDX2C(k,k,m)], d_beta, len, m, n, r);
 
         cudaEventRecord(stop);
         cudaEventSynchronize(stop);
@@ -310,7 +315,7 @@ void blocked_qr_calculate(double *d_A, int m, int n, int r)
         initMemory(d_norm, r);
         
         //norm
-        get_norm<<<r, BLOCK_SIZE>>>(&d_A[IDX2C(first_row_ind,first_row_ind,m)], d_norm, m, n, len, r)
+        get_norm<<<r, BLOCK_SIZE>>>(&d_A[IDX2C(first_row_ind,first_row_ind,m)], d_norm, m, n, len)
 
         for (int j = 0; j < r; j++) {
             ind = first_row_ind + j;
